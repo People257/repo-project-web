@@ -9,342 +9,267 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strings"
-	"time"
+
+	"repo-prompt-web/config"
+	"repo-prompt-web/types"
 
 	"github.com/gin-gonic/gin"
 )
 
-// GitHub API 响应结构
+// GitHubContent 表示 GitHub API 响应
 type GitHubContent struct {
-	Type    string `json:"type"`
-	Path    string `json:"path"`
-	Content string `json:"content"`
-	Message string `json:"message"`
+	Type        string `json:"type"`
+	Path        string `json:"path"`
+	Content     string `json:"content"`
+	DownloadURL string `json:"download_url"`
 }
 
-// GitHubError represents a GitHub API error response
-type GitHubError struct {
-	Message string `json:"message"`
-}
-
-var (
-	githubClient = &http.Client{
-		Timeout: 30 * time.Second,
+// handleCombineCodeGin 处理 ZIP 文件上传请求
+func handleCombineCodeGin(c *gin.Context) {
+	// 获取文件
+	file, err := c.FormFile("codeZip")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请上传 ZIP 文件"})
+		return
 	}
-	defaultBranches = []string{"main", "master"}
-)
 
+	// 检查文件大小
+	if file.Size > int64(config.Get().GetMaxUploadSize()) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("文件大小超过限制 %d MB", config.Get().GetMaxUploadSize()/(1024*1024))})
+		return
+	}
+
+	// 打开文件
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法打开上传的文件"})
+		return
+	}
+	defer src.Close()
+
+	// 获取输出格式和 base64 编码选项
+	format := c.DefaultQuery("format", "text")
+	useBase64 := c.DefaultQuery("base64", "false") == "true"
+
+	// 处理 ZIP 文件
+	result, err := processZipStreamWithFormat(src, file.Size, useBase64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 根据格式返回结果
+	if format == "json" {
+		c.JSON(http.StatusOK, result)
+	} else {
+		c.String(http.StatusOK, formatTextOutput(result))
+	}
+}
+
+// handleGitHubRepo 处理 GitHub 仓库请求
 func handleGitHubRepo(c *gin.Context) {
-	url := c.Query("url")
-	if url == "" {
+	// 获取 GitHub 仓库 URL
+	repoURL := c.Query("url")
+	if repoURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供 GitHub 仓库 URL"})
 		return
 	}
 
-	useBase64 := c.DefaultQuery("base64", "false") == "true"
+	// 获取输出格式和 base64 编码选项
 	format := c.DefaultQuery("format", "text")
+	useBase64 := c.DefaultQuery("base64", "false") == "true"
+
+	// 获取 GitHub Token（可选）
+	token := c.Query("token")
 
 	// 解析 GitHub URL
-	owner, repo, err := parseGitHubURL(url)
+	owner, repo, err := parseGitHubURL(repoURL)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("无效的 GitHub URL: %v", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 创建一个临时的 buffer 来存储文件树
-	var treeBuffer bytes.Buffer
 
 	// 获取仓库文件树
-	tree, err := getGitHubRepoTree(owner, repo)
+	fileTree, fileContents, err := getGitHubRepoTree(owner, repo, token, useBase64)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("获取仓库内容失败: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 打印文件树
-	treeBuffer.WriteString("文件树结构:\n")
-	tree.print(&treeBuffer, "", true)
-
-	// 获取并处理文件内容
-	var files []FileContent
-	err = processGitHubFilesWithFormat(owner, repo, &files, useBase64)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("处理仓库文件失败: %v", err)})
-		return
+	result := &types.ProcessResult{
+		FileTree:     fileTree,
+		FileContents: fileContents,
 	}
 
-	result := ProcessResult{
-		TreeStructure: treeBuffer.String(),
-		Files:         files,
-	}
-
+	// 根据格式返回结果
 	if format == "json" {
 		c.JSON(http.StatusOK, result)
 	} else {
-		// 生成文本格式输出
-		var buffer bytes.Buffer
-		buffer.WriteString(result.TreeStructure)
-		buffer.WriteString("\n文件内容:\n\n")
-
-		for _, file := range result.Files {
-			separator := fmt.Sprintf("---\nFile: %s\n---\n\n", file.Path)
-			buffer.WriteString(separator)
-			if file.IsBase64 {
-				decoded, err := base64.StdEncoding.DecodeString(file.Content)
-				if err != nil {
-					log.Printf("警告: 解码文件 %s 内容失败: %v", file.Path, err)
-					continue
-				}
-				buffer.Write(decoded)
-			} else {
-				buffer.WriteString(file.Content)
-			}
-			buffer.WriteString("\n\n")
-		}
-
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", outputFilename))
-		c.Header("Content-Type", "text/plain; charset=utf-8")
-		c.String(http.StatusOK, buffer.String())
+		c.String(http.StatusOK, formatTextOutput(result))
 	}
 }
 
-func handleCombineCodeGin(c *gin.Context) {
-	useBase64 := c.DefaultQuery("base64", "false") == "true"
-	format := c.DefaultQuery("format", "text")
-
-	// 获取上传文件
-	fileHeader, err := c.FormFile("codeZip")
+// makeGitHubRequest 发送 GitHub API 请求
+func makeGitHubRequest(url, token string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("文件上传错误: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请上传名为 'codeZip' 的 ZIP 文件"})
-		return
+		return nil, err
 	}
 
-	// 基本文件头检查
-	if fileHeader.Size == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "上传的文件为空"})
-		return
+	if token != "" {
+		req.Header.Set("Authorization", "token "+token)
 	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	if fileHeader.Size > maxUploadSize {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("文件大小超过限制 (%d MB)", maxUploadSize/(1024*1024))})
-		return
-	}
-
-	// 打开文件流
-	file, err := fileHeader.Open()
-	if err != nil {
-		log.Printf("无法打开上传的文件: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法处理上传的文件"})
-		return
-	}
-	defer file.Close()
-
-	// 调用核心处理器
-	result, err := processZipStreamWithFormat(file, fileHeader.Size, useBase64)
-	if err != nil {
-		log.Printf("处理 ZIP 文件失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "处理 ZIP 文件时出错"})
-		return
-	}
-
-	// 如果没有内容
-	if len(result.Files) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "未找到任何有效的文本文件内容"})
-		return
-	}
-
-	if format == "json" {
-		c.JSON(http.StatusOK, result)
-	} else {
-		// 生成文本格式输出
-		var buffer bytes.Buffer
-		buffer.WriteString(result.TreeStructure)
-		buffer.WriteString("\n文件内容:\n\n")
-
-		for _, file := range result.Files {
-			separator := fmt.Sprintf("---\nFile: %s\n---\n\n", file.Path)
-			buffer.WriteString(separator)
-			if file.IsBase64 {
-				decoded, err := base64.StdEncoding.DecodeString(file.Content)
-				if err != nil {
-					log.Printf("警告: 解码文件 %s 内容失败: %v", file.Path, err)
-					continue
-				}
-				buffer.Write(decoded)
-			} else {
-				buffer.WriteString(file.Content)
-			}
-			buffer.WriteString("\n\n")
-		}
-
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", outputFilename))
-		c.Header("Content-Type", "text/plain; charset=utf-8")
-		c.String(http.StatusOK, buffer.String())
-	}
-
-	log.Printf("成功处理文件 %s", fileHeader.Filename)
+	client := &http.Client{}
+	return client.Do(req)
 }
 
+// parseGitHubURL 解析 GitHub URL
 func parseGitHubURL(url string) (owner, repo string, err error) {
-	// 支持以下格式：
-	// https://github.com/owner/repo
-	// https://github.com/owner/repo.git
-	// git@github.com:owner/repo.git
-	re := regexp.MustCompile(`(?:github\.com[:/])([\w-]+)/([\w.-]+?)(?:\.git)?$`)
-	matches := re.FindStringSubmatch(url)
-	if len(matches) != 3 {
-		return "", "", fmt.Errorf("无法解析 GitHub URL")
+	patterns := []string{
+		`github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$`,
+		`github\.com/([^/]+)/([^/]+)`,
 	}
-	return matches[1], matches[2], nil
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(url)
+		if len(matches) == 3 {
+			return matches[1], matches[2], nil
+		}
+	}
+
+	return "", "", fmt.Errorf("无效的 GitHub 仓库 URL")
 }
 
-func getGitHubRepoTree(owner, repo string) (*TreeNode, error) {
-	var lastErr error
-	for _, branch := range defaultBranches {
+// getGitHubRepoTree 获取 GitHub 仓库文件树
+func getGitHubRepoTree(owner, repo, token string, useBase64 bool) (*types.TreeNode, map[string]types.FileContent, error) {
+	// 创建根节点
+	root := types.NewTreeNode("", false)
+	fileContents := make(map[string]types.FileContent)
+
+	// 尝试不同的分支名
+	branches := []string{"main", "master"}
+	var lastError error
+
+	for _, branch := range branches {
 		apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1", owner, repo, branch)
-		resp, err := githubClient.Get(apiURL)
+		resp, err := makeGitHubRequest(apiURL, token)
 		if err != nil {
-			lastErr = err
+			lastError = err
 			continue
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == http.StatusNotFound {
-			lastErr = fmt.Errorf("branch %s not found", branch)
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			var githubErr GitHubError
-			if err := json.NewDecoder(resp.Body).Decode(&githubErr); err != nil {
-				lastErr = fmt.Errorf("GitHub API error: %s", resp.Status)
-			} else {
-				lastErr = fmt.Errorf("GitHub API error: %s", githubErr.Message)
+		if resp.StatusCode == 200 {
+			// 处理文件树
+			var treeResp struct {
+				Tree []struct {
+					Path string `json:"path"`
+					Type string `json:"type"`
+					URL  string `json:"url"`
+				} `json:"tree"`
 			}
-			continue
-		}
 
-		var result struct {
-			Tree []struct {
-				Path string `json:"path"`
-				Type string `json:"type"`
-			} `json:"tree"`
-		}
+			if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+				return nil, nil, err
+			}
 
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			lastErr = err
-			continue
-		}
+			// 处理文件内容
+			for _, item := range treeResp.Tree {
+				if item.Type == "blob" {
+					// 检查文件是否应该被排除
+					if config.Get().IsExcluded(item.Path, 0) {
+						continue
+					}
 
-		root := newTreeNode("", false)
-		for _, item := range result.Tree {
-			parts := strings.Split(item.Path, "/")
-			current := root
-			for i, part := range parts {
-				isLast := i == len(parts)-1
-				isDir := !isLast || item.Type == "tree"
-				if _, exists := current.children[part]; !exists {
-					current.children[part] = newTreeNode(part, isDir)
+					// 获取文件内容
+					content, err := getGitHubFileContent(owner, repo, item.Path, token, useBase64)
+					if err != nil {
+						log.Printf("获取文件内容失败 %s: %v", item.Path, err)
+						continue
+					}
+
+					if content != "" {
+						fileContents[item.Path] = types.FileContent{
+							Path:     item.Path,
+							Content:  content,
+							IsBase64: useBase64,
+						}
+					}
 				}
-				current = current.children[part]
+
+				// 添加到文件树
+				root.AddPath(item.Path)
 			}
+
+			return root, fileContents, nil
 		}
-		return root, nil
-	}
-	return nil, fmt.Errorf("无法获取仓库树结构: %v", lastErr)
-}
 
-func processGitHubFilesWithFormat(owner, repo string, files *[]FileContent, useBase64 bool) error {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents", owner, repo)
-	return processGitHubDirWithFormat(apiURL, "", files, useBase64)
-}
-
-func processGitHubDirWithFormat(apiURL, path string, files *[]FileContent, useBase64 bool) error {
-	url := apiURL
-	if path != "" {
-		url = fmt.Sprintf("%s/%s", apiURL, path)
+		lastError = fmt.Errorf("GitHub API 请求失败: %s", resp.Status)
 	}
 
-	resp, err := githubClient.Get(url)
+	return nil, nil, lastError
+}
+
+// getGitHubFileContent 获取 GitHub 文件内容
+func getGitHubFileContent(owner, repo, path, token string, useBase64 bool) (string, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repo, path)
+	resp, err := makeGitHubRequest(apiURL, token)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		var githubErr GitHubError
-		if err := json.NewDecoder(resp.Body).Decode(&githubErr); err != nil {
-			return fmt.Errorf("GitHub API error: %s", resp.Status)
-		}
-		return fmt.Errorf("GitHub API error: %s", githubErr.Message)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("获取文件内容失败: %s", resp.Status)
 	}
 
-	// 先尝试解析为数组（目录）
-	var contents []GitHubContent
-	bodyBytes, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("读取响应失败: %v", err)
+		return "", err
 	}
 
-	// 尝试解析为数组
-	if err := json.Unmarshal(bodyBytes, &contents); err != nil {
-		// 如果解析数组失败，尝试解析为单个文件
-		var singleFile GitHubContent
-		if err := json.Unmarshal(bodyBytes, &singleFile); err != nil {
-			return fmt.Errorf("解析响应失败: %v", err)
-		}
-		// 如果是单个文件，将其添加到数组中
-		contents = []GitHubContent{singleFile}
+	var content GitHubContent
+	if err := json.Unmarshal(body, &content); err != nil {
+		return "", err
 	}
 
-	for _, content := range contents {
-		if content.Type == "dir" {
-			if err := processGitHubDirWithFormat(apiURL, content.Path, files, useBase64); err != nil {
-				log.Printf("警告: 处理目录 %s 失败: %v", content.Path, err)
-				continue
-			}
-		} else if isLikelyTextFile(content.Path) && !isExcluded(content.Path, 0) {
-			// 如果已经有内容，直接使用
-			if content.Content != "" {
-				decodedContent, err := base64.StdEncoding.DecodeString(content.Content)
-				if err != nil {
-					log.Printf("警告: 解码文件 %s 内容失败: %v", content.Path, err)
-					continue
-				}
-
-				*files = append(*files, processContent(content.Path, decodedContent, useBase64))
-				log.Printf("已处理: %s", content.Path)
-				continue
-			}
-
-			// 否则获取文件内容
-			fileResp, err := githubClient.Get(fmt.Sprintf("%s/%s", apiURL, content.Path))
-			if err != nil {
-				log.Printf("警告: 获取文件 %s 失败: %v", content.Path, err)
-				continue
-			}
-
-			var fileContent GitHubContent
-			if err := json.NewDecoder(fileResp.Body).Decode(&fileContent); err != nil {
-				fileResp.Body.Close()
-				log.Printf("警告: 解析文件 %s 内容失败: %v", content.Path, err)
-				continue
-			}
-			fileResp.Body.Close()
-
-			// GitHub API returns base64 encoded content, decode it first
-			decodedContent, err := base64.StdEncoding.DecodeString(fileContent.Content)
-			if err != nil {
-				log.Printf("警告: 解码文件 %s 内容失败: %v", content.Path, err)
-				continue
-			}
-
-			*files = append(*files, processContent(content.Path, decodedContent, useBase64))
-			log.Printf("已处理: %s", content.Path)
-		}
+	// 检查文件类型
+	if !config.Get().IsLikelyTextFile(path) {
+		return "", nil
 	}
 
-	return nil
+	// 解码 base64 内容
+	decoded, err := base64.StdEncoding.DecodeString(content.Content)
+	if err != nil {
+		return "", err
+	}
+
+	// 如果需要 base64 编码输出
+	if useBase64 {
+		return base64.StdEncoding.EncodeToString(decoded), nil
+	}
+
+	return string(decoded), nil
+}
+
+// formatTextOutput 格式化文本输出
+func formatTextOutput(result *types.ProcessResult) string {
+	var buf bytes.Buffer
+
+	// 输出文件树
+	buf.WriteString("文件结构:\n")
+	result.FileTree.Print(&buf, "", true)
+	buf.WriteString("\n文件内容:\n")
+
+	// 输出文件内容
+	for path, content := range result.FileContents {
+		buf.WriteString(fmt.Sprintf("\n=== %s ===\n", path))
+		buf.WriteString(content.Content)
+		buf.WriteString("\n")
+	}
+
+	return buf.String()
 }

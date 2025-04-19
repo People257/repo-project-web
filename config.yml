@@ -1,0 +1,88 @@
+# 文件大小限制
+file_limits:
+  max_upload_size: 1000 # MB
+  max_file_size: 1000   # MB
+  read_buffer_size: 40960
+
+# 输出设置
+output:
+  filename: "combined_code.txt"
+
+# 排除的目录前缀
+excluded_dir_prefixes:
+  - .git/
+  - node_modules/
+  - vendor/
+  - bin/
+  - obj/
+  - dist/
+  - build/
+
+# 排除的文件扩展名
+excluded_extensions:
+  - .exe
+  - .dll
+  - .so
+  - .dylib
+  - .bin
+  - .zip
+  - .tar
+  - .gz
+  - .rar
+  - .jpg
+  - .jpeg
+  - .png
+  - .gif
+  - .bmp
+  - .ico
+  - .pdf
+  - .doc
+  - .docx
+  - .xls
+  - .xlsx
+
+# 支持的文本文件扩展名
+text_extensions:
+  - .go
+  - .java
+  - .py
+  - .js
+  - .ts
+  - .jsx
+  - .tsx
+  - .html
+  - .css
+  - .scss
+  - .less
+  - .json
+  - .xml
+  - .yaml
+  - .yml
+  - .md
+  - .txt
+  - .ini
+  - .conf
+  - .cfg
+  - .sh
+  - .bash
+  - .sql
+  - .proto
+
+# 无扩展名的文本文件名
+text_filenames:
+  - README
+  - LICENSE
+  - CHANGELOG
+  - CONTRIBUTING
+  - AUTHORS
+  - MAINTAINERS
+  - VERSION
+
+# 特殊 MIME 类型
+text_mime_types:
+  - application/json
+  - application/xml
+  - application/javascript
+  - application/x-javascript
+  - application/ecmascript
+  - application/x-httpd-php 

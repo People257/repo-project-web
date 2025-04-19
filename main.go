@@ -2,6 +2,9 @@ package main
 
 import (
 	"log"
+	"path/filepath"
+
+	"repo-prompt-web/config"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,11 +16,17 @@ func main() {
 	//TIP Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined or highlighted text
 	// to see how GoLand suggests fixing it.
 
+	// 加载配置文件
+	configPath := filepath.Join(".", "config.yml")
+	if err := config.Load(configPath); err != nil {
+		log.Fatalf("加载配置文件失败: %v", err)
+	}
+
 	// 创建 Gin 引擎
 	router := gin.Default()
 
 	// 设置上传限制
-	router.MaxMultipartMemory = maxUploadSize
+	router.MaxMultipartMemory = config.Get().GetMaxUploadSize()
 
 	// 注册路由
 	router.POST("/api/combine-code", handleCombineCodeGin)
