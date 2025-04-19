@@ -20,6 +20,16 @@ type Config struct {
 		Filename string `yaml:"filename"`
 	} `yaml:"output"`
 
+	ApiKeys struct {
+		Deepseek string `yaml:"deepseek"`
+		Github   string `yaml:"github"`
+	} `yaml:"api_keys"`
+
+	Logging struct {
+		Level      string `yaml:"level"`       // 日志级别: debug, info, warn, error
+		OutputPath string `yaml:"output_path"` // 日志输出路径
+	} `yaml:"logging"`
+
 	ExcludedDirPrefixes []string `yaml:"excluded_dir_prefixes"`
 	ExcludedExtensions  []string `yaml:"excluded_extensions"`
 	TextExtensions      []string `yaml:"text_extensions"`
@@ -66,6 +76,14 @@ func Load(configPath string) error {
 		// 转换大小为字节
 		config.FileLimits.MaxUploadSize *= 1024 * 1024 // MB to bytes
 		config.FileLimits.MaxFileSize *= 1024 * 1024   // MB to bytes
+
+		// 尝试从环境变量读取 API 密钥
+		if envKey := os.Getenv("DEEPSEEK_API_KEY"); envKey != "" {
+			config.ApiKeys.Deepseek = envKey
+		}
+		if envKey := os.Getenv("GITHUB_API_KEY"); envKey != "" {
+			config.ApiKeys.Github = envKey
+		}
 	})
 	return err
 }
@@ -147,4 +165,30 @@ func (c *Config) GetOutputFilename() string {
 // GetReadBufferSize 返回读取缓冲区大小
 func (c *Config) GetReadBufferSize() int {
 	return c.FileLimits.ReadBufferSize
+}
+
+// GetDeepseekAPIKey 返回 DeepSeek API 密钥
+func (c *Config) GetDeepseekAPIKey() string {
+	return c.ApiKeys.Deepseek
+}
+
+// GetGithubAPIKey 返回 GitHub API 密钥
+func (c *Config) GetGithubAPIKey() string {
+	return c.ApiKeys.Github
+}
+
+// GetLogLevel 返回日志级别
+func (c *Config) GetLogLevel() string {
+	if c.Logging.Level == "" {
+		return "info" // 默认日志级别
+	}
+	return c.Logging.Level
+}
+
+// GetLogOutputPath 返回日志输出路径
+func (c *Config) GetLogOutputPath() string {
+	if c.Logging.OutputPath == "" {
+		return "./logs" // 默认日志目录
+	}
+	return c.Logging.OutputPath
 }
