@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -13,11 +14,24 @@ import (
 	"strings"
 )
 
-// 用于构建文件树的节点结构
+// FileContent represents a file's content and metadata
+type FileContent struct {
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	IsBase64 bool   `json:"is_base64,omitempty"`
+}
+
+// TreeNode represents a node in the file tree
 type TreeNode struct {
 	name     string
 	isDir    bool
 	children map[string]*TreeNode
+}
+
+// ProcessResult represents the result of processing files
+type ProcessResult struct {
+	TreeStructure string        `json:"tree_structure"`
+	Files         []FileContent `json:"files"`
 }
 
 // 创建新的树节点
@@ -64,6 +78,26 @@ func (n *TreeNode) print(buffer *bytes.Buffer, prefix string, isLast bool) {
 }
 
 func processZipStream(file multipart.File, size int64) ([]byte, error) {
+	result, err := processZipStreamWithFormat(file, size, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+	buffer.WriteString(result.TreeStructure)
+	buffer.WriteString("\n文件内容:\n\n")
+
+	for _, file := range result.Files {
+		separator := fmt.Sprintf("---\nFile: %s\n---\n\n", file.Path)
+		buffer.WriteString(separator)
+		buffer.WriteString(file.Content)
+		buffer.WriteString("\n\n")
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func processZipStreamWithFormat(file io.ReaderAt, size int64, useBase64 bool) (*ProcessResult, error) {
 	// 创建 ZIP Reader
 	reader, err := zip.NewReader(file, size)
 	if err != nil {
@@ -72,6 +106,8 @@ func processZipStream(file multipart.File, size int64) ([]byte, error) {
 
 	// 创建根节点
 	root := newTreeNode("", false)
+	var files []FileContent
+	var treeBuffer bytes.Buffer
 
 	// 构建文件树
 	for _, zipEntry := range reader.File {
@@ -90,82 +126,73 @@ func processZipStream(file multipart.File, size int64) ([]byte, error) {
 		}
 	}
 
-	// 初始化输出 Buffer
-	var outputBuffer bytes.Buffer
-
-	// 首先输出文件树
-	outputBuffer.WriteString("文件树结构:\n")
-	root.print(&outputBuffer, "", true)
-	outputBuffer.WriteString("\n文件内容:\n\n")
+	// 生成文件树结构
+	treeBuffer.WriteString("文件树结构:\n")
+	root.print(&treeBuffer, "", true)
 
 	// 遍历 ZIP 条目处理文件内容
 	for _, zipEntry := range reader.File {
-		// 获取文件信息
-		filePath := zipEntry.Name
-		fileInfo := zipEntry.FileInfo()
-		uncompressedSize := zipEntry.UncompressedSize64
-
 		// 跳过目录
-		if fileInfo.IsDir() {
+		if zipEntry.FileInfo().IsDir() {
 			continue
 		}
 
-		// 执行过滤
-		if isExcluded(filePath, uncompressedSize) {
+		filePath := zipEntry.Name
+		if isExcluded(filePath, zipEntry.UncompressedSize64) {
 			log.Printf("排除 (规则): %s", filePath)
 			continue
 		}
 
-		// 初步文本文件检查
 		if !isLikelyTextFile(filePath) {
 			log.Printf("排除 (非文本扩展名): %s", filePath)
 			continue
 		}
 
-		// 打开 ZIP 内文件流
 		rc, err := zipEntry.Open()
 		if err != nil {
 			log.Printf("警告: 无法打开文件 %s: %v", filePath, err)
 			continue
 		}
 
-		// 确保在函数返回前关闭文件流
-		defer rc.Close()
+		contentBytes, err := io.ReadAll(io.LimitReader(rc, maxFileSize+1))
+		rc.Close()
 
-		// 读取文件内容（带限制）
-		limitedReader := io.LimitReader(rc, maxFileSize+1)
-		contentBytes, err := io.ReadAll(limitedReader)
 		if err != nil {
 			log.Printf("警告: 读取文件 %s 失败: %v", filePath, err)
-			rc.Close()
 			continue
 		}
 
-		// 检查是否超限
 		if int64(len(contentBytes)) > maxFileSize {
 			log.Printf("排除 (文件内容超限): %s", filePath)
-			rc.Close()
 			continue
 		}
 
-		// 二进制内容检测
 		contentType := http.DetectContentType(contentBytes)
 		if !strings.HasPrefix(contentType, "text/") && !isTextContentTypeException(contentType) {
 			log.Printf("排除 (检测到二进制内容 %s): %s", contentType, filePath)
-			rc.Close()
 			continue
 		}
 
-		// 内容追加到 Buffer
 		normalizedPath := filepath.ToSlash(filePath)
-		separator := fmt.Sprintf("---\nFile: %s\n---\n\n", normalizedPath)
-		outputBuffer.WriteString(separator)
-		outputBuffer.Write(contentBytes)
-		outputBuffer.WriteString("\n\n")
-
+		files = append(files, processContent(normalizedPath, contentBytes, useBase64))
 		log.Printf("已处理: %s", filePath)
-		rc.Close()
 	}
 
-	return outputBuffer.Bytes(), nil
+	return &ProcessResult{
+		TreeStructure: treeBuffer.String(),
+		Files:         files,
+	}, nil
+}
+
+func processContent(path string, content []byte, useBase64 bool) FileContent {
+	var fileContent FileContent
+	fileContent.Path = path
+	if useBase64 {
+		fileContent.Content = base64.StdEncoding.EncodeToString(content)
+		fileContent.IsBase64 = true
+	} else {
+		fileContent.Content = string(content)
+		fileContent.IsBase64 = false
+	}
+	return fileContent
 }

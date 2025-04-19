@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	maxUploadSize      int64  = 100 * 1024 * 1024 // 50MB
-	maxFileSize        int64  = 100 * 1024 * 1024 // 2MB
+	maxUploadSize      int64  = 1000 * 1024 * 1024 // 50MB
+	maxFileSize        int64  = 1000 * 1024 * 1024 // 2MB
 	outputFilename     string = "combined_code.txt"
 	fileReadBufferSize        = 40960
 )
@@ -47,6 +47,7 @@ var excludedExtensions = map[string]struct{}{
 
 var likelyTextExtensions = map[string]struct{}{
 	".go":    {},
+	".java":  {},
 	".py":    {},
 	".js":    {},
 	".ts":    {},
