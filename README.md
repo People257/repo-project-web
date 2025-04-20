@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# project-prompt
-=======
 # project-prompt
 # Repo Prompt Web
 
@@ -232,8 +229,3 @@ POST /api/preprocess-zip
 - 项目的特点和设计考量
 
 这个分析将作为提示词提供给 Gemini 等大型语言模型，帮助它更好地理解项目上下文。
-
-## 许可证
-
-MIT 
->>>>>>> temp-master
