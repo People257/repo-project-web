@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AIService 提供AI相关服务
+// AIService 提供AI相关服务的结构体
 type AIService struct {
 	geminiClient   *gemini.Client
 	cfg            *config.Config
@@ -23,16 +23,16 @@ type AIService struct {
 	mu             sync.RWMutex
 }
 
-// ConversationContext 维护对话上下文
+// ConversationContext 维护对话上下文的结构体
 type ConversationContext struct {
 	InitialPrompt string            // 初始提示（包含项目信息）
 	Messages      []ConversationMsg // 对话消息记录
 	LastActive    time.Time         // 最后活跃时间
 }
 
-// ConversationMsg 对话消息
+// ConversationMsg 对话消息结构体
 type ConversationMsg struct {
-	Role    string // user 或 assistant
+	Role    string // 角色，可以是 "user" 或 "assistant"
 	Content string // 消息内容
 }
 
@@ -189,7 +189,7 @@ func (s *AIService) AskQuestionAboutCode(result *types.ProcessResult, projectAna
 		promptBuilder.AppendLine(context.InitialPrompt)
 		promptBuilder.AppendLine("\n## 对话历史")
 
-		// 只保留最近5次对话
+		// 只保留最近10次对话
 		startIdx := 0
 		if len(context.Messages) > 10 {
 			startIdx = len(context.Messages) - 10
@@ -275,7 +275,7 @@ func (s *AIService) AskQuestionAboutCodeStream(result *types.ProcessResult, proj
 		promptBuilder.AppendLine(context.InitialPrompt)
 		promptBuilder.AppendLine("\n## 对话历史")
 
-		// 只保留最近5次对话
+		// 只保留最近10次对话
 		startIdx := 0
 		if len(context.Messages) > 10 {
 			startIdx = len(context.Messages) - 10
