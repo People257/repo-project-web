@@ -138,7 +138,7 @@ func (pg *PromptGenerator) buildDirectoryTree(rootDir string) (string, error) {
 	return result, nil
 }
 
-// 收集重要文档文件内容
+// collectImportantDocuments 收集重要文档文件内容
 func (pg *PromptGenerator) collectImportantDocuments(rootDir string) ([]models.Document, error) {
 	var documents []models.Document
 
@@ -217,10 +217,22 @@ func (pg *PromptGenerator) collectImportantDocuments(rootDir string) ([]models.D
 					contentStr = contentStr[:maxContentSize] + "\n... [内容已截断] ..."
 				}
 
+				// 确定文档类型
+				docType := "other"
+				if strings.Contains(strings.ToLower(filename), "readme") {
+					docType = "readme"
+				} else if filename == "LICENSE" {
+					docType = "license"
+				} else if filename == "go.mod" || filename == "package.json" || filename == "requirements.txt" || filename == "Cargo.toml" {
+					docType = "config"
+				} else if filename == "Dockerfile" {
+					docType = "docker"
+				}
+
 				documents = append(documents, models.Document{
 					Path:    relPath,
 					Content: contentStr,
-					Size:    info.Size(),
+					Type:    docType,
 				})
 
 				fileTypeCount[fileType]++

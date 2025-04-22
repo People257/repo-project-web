@@ -22,6 +22,17 @@ func (s *PromptService) GenerateContextPrompt(projectPath string) (*models.Conte
 	return s.promptGenerator.ProcessDirectoryContext(projectPath)
 }
 
+// GetProjectAnalysis 生成项目分析
+func (s *PromptService) GetProjectAnalysis(projectPath string) (*models.ProjectAnalysis, error) {
+	contextPrompt, err := s.GenerateContextPrompt(projectPath)
+	if err != nil {
+		return nil, err
+	}
+
+	analysis := models.ConvertToProjectAnalysis(*contextPrompt)
+	return &analysis, nil
+}
+
 // GeneratePromptWithApiKey 使用指定的 API 密钥生成提示
 func (s *PromptService) GeneratePromptWithApiKey(request models.PromptRequest) (*models.PromptResponse, error) {
 	// 创建临时生成器使用请求指定的 API 密钥

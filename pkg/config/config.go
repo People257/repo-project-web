@@ -23,7 +23,15 @@ type Config struct {
 	ApiKeys struct {
 		Deepseek string `yaml:"deepseek"`
 		Github   string `yaml:"github"`
+		Gemini   string `yaml:"gemini"`
 	} `yaml:"api_keys"`
+
+	Gemini struct {
+		Enabled     bool   `yaml:"enabled"`
+		ApiEndpoint string `yaml:"api_endpoint"`
+		Model       string `yaml:"model"`
+		ProxyURL    string `yaml:"proxy_url"`
+	} `yaml:"gemini"`
 
 	Logging struct {
 		Level      string `yaml:"level"`       // 日志级别: debug, info, warn, error
@@ -83,6 +91,9 @@ func Load(configPath string) error {
 		}
 		if envKey := os.Getenv("GITHUB_API_KEY"); envKey != "" {
 			config.ApiKeys.Github = envKey
+		}
+		if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
+			config.ApiKeys.Gemini = envKey
 		}
 	})
 	return err
@@ -175,6 +186,45 @@ func (c *Config) GetDeepseekAPIKey() string {
 // GetGithubAPIKey 返回 GitHub API 密钥
 func (c *Config) GetGithubAPIKey() string {
 	return c.ApiKeys.Github
+}
+
+// GetGeminiAPIKey 返回 Gemini API 密钥
+func (c *Config) GetGeminiAPIKey() string {
+	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
+		return envKey
+	}
+	return c.ApiKeys.Gemini
+}
+
+// IsGeminiEnabled 检查是否启用 Gemini 集成
+func (c *Config) IsGeminiEnabled() bool {
+	return c.Gemini.Enabled
+}
+
+// GetGeminiApiEndpoint 返回 Gemini API 端点
+func (c *Config) GetGeminiApiEndpoint() string {
+	if c.Gemini.ApiEndpoint == "" {
+		return "https://generativelanguage.googleapis.com/v1beta/models"
+	}
+	return c.Gemini.ApiEndpoint
+}
+
+// GetGeminiProxyURL 返回 Gemini 代理 URL
+func (c *Config) GetGeminiProxyURL() string {
+	// 优先使用环境变量中的代理
+	if envProxy := os.Getenv("GEMINI_PROXY"); envProxy != "" {
+		return envProxy
+	}
+	// 其次使用配置文件中的代理
+	return c.Gemini.ProxyURL
+}
+
+// GetGeminiModel 返回使用的 Gemini 模型
+func (c *Config) GetGeminiModel() string {
+	if c.Gemini.Model == "" {
+		return "gemini-1.5-pro"
+	}
+	return c.Gemini.Model
 }
 
 // GetLogLevel 返回日志级别

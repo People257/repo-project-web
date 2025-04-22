@@ -1,13 +1,13 @@
 package models
 
-import "time"
+import (
+	"time"
 
-// Document 表示项目中的文档文件
-type Document struct {
-	Path    string // 文件路径
-	Content string // 文件内容
-	Size    int64  // 文件大小
-}
+	"repo-prompt-web/pkg/types"
+)
+
+// Document alias to unified model
+type Document = types.Document
 
 // ContextPrompt 表示生成的上下文提示
 type ContextPrompt struct {
@@ -15,6 +15,18 @@ type ContextPrompt struct {
 	Documents          []Document // 文档集合
 	PromptSuggestions  []string   // 提示词建议
 	GeneratedAt        time.Time  // 生成时间
+}
+
+// ProjectAnalysis alias to unified model
+type ProjectAnalysis = types.ProjectAnalysis
+
+// ConvertToProjectAnalysis converts a ContextPrompt to a ProjectAnalysis
+func ConvertToProjectAnalysis(cp ContextPrompt) ProjectAnalysis {
+	return ProjectAnalysis{
+		PromptSuggestions: cp.PromptSuggestions,
+		Documents:         cp.Documents,
+		GeneratedAt:       cp.GeneratedAt.Format(time.RFC3339),
+	}
 }
 
 // PromptRequest 表示提示词生成请求
