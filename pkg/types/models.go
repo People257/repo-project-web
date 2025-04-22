@@ -11,7 +11,7 @@ import (
 type TreeNode struct {
 	Name     string               `json:"name"`
 	IsDir    bool                 `json:"is_dir"`
-	Children map[string]*TreeNode `json:"children"`
+	Children map[string]*TreeNode `json:"children,omitempty"`
 }
 
 // FileContent represents a file's content and metadata
@@ -23,8 +23,22 @@ type FileContent struct {
 
 // ProcessResult represents the result of processing files
 type ProcessResult struct {
-	FileTree     *TreeNode              `json:"fileTree"`
-	FileContents map[string]FileContent `json:"fileContents"`
+	FileTree     *TreeNode              `json:"file_tree"`
+	FileContents map[string]FileContent `json:"file_contents"`
+}
+
+// Document represents a documentation file
+type Document struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Type    string `json:"type"` // e.g., "readme", "license", "config"
+}
+
+// ProjectAnalysis represents the analysis of a project
+type ProjectAnalysis struct {
+	PromptSuggestions []string   `json:"prompt_suggestions"`
+	Documents         []Document `json:"documents,omitempty"`
+	GeneratedAt       string     `json:"generated_at"`
 }
 
 // NewTreeNode creates a new tree node
@@ -72,6 +86,10 @@ func (n *TreeNode) Print(buffer *bytes.Buffer, prefix string, isLast bool) {
 
 // AddPath adds a path to the tree
 func (n *TreeNode) AddPath(path string) {
+	if path == "" {
+		return
+	}
+
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	current := n
 

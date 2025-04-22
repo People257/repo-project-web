@@ -132,6 +132,7 @@ GET /api/github-code?url=<repo_url>
 ```json
 {
   "success": true,
+  "session_id": "bf7c8172-5c37-4d89-a0c7-b8e1dbfb011a",
   "prompt_suggestions": ["项目架构分析内容..."],
   "generated_at": "2023-04-19T12:34:56Z"
 }
@@ -181,6 +182,46 @@ POST /api/preprocess-zip
   "file_tree": {...},
   "file_contents": {...}
 }
+```
+
+### 5. 询问关于代码的问题
+
+```
+GET/POST /api/ask-code-question
+```
+
+查询参数:
+- `session_id`: 会话ID（通过上传ZIP文件或获取GitHub仓库后返回的）
+- `question`: 想问的关于代码的问题
+- `stream` (可选): 是否使用流式响应，支持 `true` 或 `false`(默认)
+
+请求示例:
+```
+GET /api/ask-code-question?session_id=bf7c8172-5c37-4d89-a0c7-b8e1dbfb011a&question=这个项目的主要功能是什么?
+```
+
+响应示例 (stream=false):
+```json
+{
+  "success": true,
+  "question": "这个项目的主要功能是什么?",
+  "answer": "这个项目是一个基于Go语言的Web服务，主要用于处理代码仓库的智能提示词生成和代码处理..."
+}
+```
+
+如果 `stream=true`，则以Server-Sent Events格式返回响应:
+```
+event: message
+data: 这个项目是一个基于Go语言的Web服务，主要
+
+event: message
+data: 用于处理代码仓库的智能提示词生成和代码处理
+
+event: message
+data: ...
+
+event: error (仅当出错时)
+data: {"error": "错误信息"}
 ```
 
 ## 参数组合使用说明

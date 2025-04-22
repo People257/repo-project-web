@@ -4,6 +4,7 @@ import (
 	"log"
 	"path/filepath"
 
+	"repo-prompt-web/internal/app/service"
 	"repo-prompt-web/internal/application"
 	"repo-prompt-web/internal/domain/services"
 	"repo-prompt-web/internal/infrastructure/github"
@@ -67,6 +68,23 @@ func LoggerMiddleware() gin.HandlerFunc {
 	}
 }
 
+// CORSMiddleware 添加CORS支持
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func main() {
 	// 加载配置文件
 	configPath := filepath.Join(".", "config.yml")
@@ -88,18 +106,20 @@ func main() {
 	fileProcessor := services.NewFileProcessor(cfg)
 	fileService := application.NewFileService(fileProcessor)
 	githubClient := github.NewClient(cfg)
+	aiService := service.NewAIService(cfg)
 
 	// 创建提示词服务和处理器
 	promptService := application.NewPromptService(deepseekAPIKey)
 	promptHandler := handlers.NewPromptHandler(promptService, fileService, cfg)
 
 	// 创建文件处理器
-	fileHandler := handlers.NewFileHandler(fileService, promptService, githubClient, cfg)
+	fileHandler := handlers.NewFileHandler(fileService, promptService, githubClient, aiService, cfg)
 
 	// 创建 Gin 引擎
 	router := gin.Default()
 
 	// 添加中间件
+	router.Use(CORSMiddleware())
 	router.Use(RequestIDMiddleware())
 	router.Use(LoggerMiddleware())
 
@@ -114,6 +134,10 @@ func main() {
 	router.POST("/api/generate-prompt", promptHandler.HandleGeneratePrompt)
 	router.POST("/api/preprocess-zip", promptHandler.HandlePreProcess)
 
+	// 注册代码问答路由
+	router.POST("/api/ask-code-question", fileHandler.HandleAskCodeQuestion)
+	router.GET("/api/ask-code-question", fileHandler.HandleAskCodeQuestion)
+
 	// 定义监听地址
 	listenAddr := ":8080"
 
@@ -125,13 +149,22 @@ func main() {
 		logger.Info("已配置 DeepSeek API 密钥，提示词生成功能可用")
 	}
 
+	// 检查Gemini API密钥
+	if cfg.GetGeminiAPIKey() == "" {
+		logger.Warn("未设置 Gemini API 密钥，代码问答功能将无法使用")
+		logger.Info("请在 config.yml 文件中配置 api_keys.gemini 或设置环境变量 GEMINI_API_KEY")
+	} else {
+		logger.Info("已配置 Gemini API 密钥，代码问答功能可用")
+	}
+
 	// 打印使用方法
 	logger.Info("启动服务", zap.String("listen_addr", listenAddr))
 	logger.Info("API使用方法",
 		zap.String("combine_code", "POST http://localhost"+listenAddr+"/api/combine-code"),
 		zap.String("github_code", "GET http://localhost"+listenAddr+"/api/github-code?url=<repo_url>"),
 		zap.String("generate_prompt", "POST http://localhost"+listenAddr+"/api/generate-prompt"),
-		zap.String("preprocess_zip", "POST http://localhost"+listenAddr+"/api/preprocess-zip"))
+		zap.String("preprocess_zip", "POST http://localhost"+listenAddr+"/api/preprocess-zip"),
+		zap.String("ask_code_question", "GET/POST http://localhost"+listenAddr+"/api/ask-code-question?session_id=<id>&question=<question>&stream=true|false"))
 
 	if err := router.Run(listenAddr); err != nil {
 		logger.Fatal("启动 Gin 服务失败", zap.Error(err))

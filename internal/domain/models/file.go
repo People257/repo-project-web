@@ -1,52 +1,26 @@
 package models
 
-import "strings"
+import (
+	"repo-prompt-web/pkg/types"
+)
 
-// FileContent 表示文件内容和元数据
-type FileContent struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	IsBase64 bool   `json:"is_base64,omitempty"`
-}
+// FileContent alias to unified model
+type FileContent = types.FileContent
 
-// TreeNode 表示文件树中的节点
-type TreeNode struct {
-	Name     string
-	IsDir    bool
-	Children map[string]*TreeNode
-}
+// TreeNode alias to unified model
+type TreeNode = types.TreeNode
 
-// ProcessResult 表示文件处理结果
-type ProcessResult struct {
-	FileTree     *TreeNode              `json:"file_tree"`
-	FileContents map[string]FileContent `json:"file_contents"`
-}
+// ProcessResult alias to unified model
+type ProcessResult = types.ProcessResult
 
-// NewTreeNode 创建新的树节点
+// NewTreeNode alias to unified function
 func NewTreeNode(name string, isDir bool) *TreeNode {
-	return &TreeNode{
-		Name:     name,
-		IsDir:    isDir,
-		Children: make(map[string]*TreeNode),
-	}
+	return types.NewTreeNode(name, isDir)
 }
 
-// AddPath 添加路径到树中
-func (n *TreeNode) AddPath(path string) {
-	if path == "" {
-		return
-	}
-
-	parts := strings.Split(path, "/")
-	current := n
-
-	for i, part := range parts {
-		isLast := i == len(parts)-1
-		isDir := !isLast
-
-		if _, exists := current.Children[part]; !exists {
-			current.Children[part] = NewTreeNode(part, isDir)
-		}
-		current = current.Children[part]
+// AddPathToTree is a helper function that wraps the TreeNode.AddPath method
+func AddPathToTree(node *TreeNode, path string) {
+	if node != nil {
+		node.AddPath(path)
 	}
 }
