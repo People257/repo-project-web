@@ -59,6 +59,7 @@ jobs:
         host: ${{ secrets.DEPLOY_HOST }}
         username: ${{ secrets.DEPLOY_USERNAME }}
         key: ${{ secrets.DEPLOY_KEY }}
+        key_format: openssh
         port: 22
         script: |
           # 创建应用目录（如果不存在）

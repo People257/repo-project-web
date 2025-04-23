@@ -66,6 +66,7 @@ jobs:
           host: ${{ secrets.PROD_DEPLOY_HOST }}
           username: ${{ secrets.PROD_DEPLOY_USERNAME }}
           key: ${{ secrets.PROD_DEPLOY_KEY }}
+          key_format: openssh
           port: 22
           script: |
             VERSION=${GITHUB_REF#refs/tags/}
