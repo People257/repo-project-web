@@ -121,9 +121,9 @@ func (pg *PromptGenerator) buildDirectoryTree(rootDir string) (string, error) {
 		indent := strings.Repeat("  ", depth)
 
 		if info.IsDir() {
-			buffer.WriteString(fmt.Sprintf("%s📁 %s/\n", indent, info.Name()))
+			buffer.WriteString(indent + "📁 " + info.Name() + "/\n")
 		} else {
-			buffer.WriteString(fmt.Sprintf("%s📄 %s (%s)\n", indent, info.Name(), formatFileSize(info.Size())))
+			buffer.WriteString(indent + "📄 " + info.Name() + " (" + formatFileSize(info.Size()) + ")\n")
 		}
 
 		return nil

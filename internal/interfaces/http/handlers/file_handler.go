@@ -60,9 +60,8 @@ func (ss *SessionStorage) cleanExpiredSessions() {
 
 	for range ticker.C {
 		ss.mu.Lock()
-		now := time.Now()
 		for id, session := range ss.sessions {
-			if now.Sub(session.CreatedAt) > ss.expiresIn {
+			if time.Since(session.CreatedAt) > ss.expiresIn {
 				delete(ss.sessions, id)
 				logger.Debug("已清理过期会话", zap.String("session_id", id))
 			}
@@ -97,7 +96,7 @@ func (ss *SessionStorage) Get(sessionID string) (SessionData, bool) {
 	}
 
 	// 检查是否过期
-	if time.Now().Sub(session.CreatedAt) > ss.expiresIn {
+	if time.Since(session.CreatedAt) > ss.expiresIn {
 		return SessionData{}, false
 	}
 
