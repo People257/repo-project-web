@@ -100,7 +100,7 @@ func (c *Client) getTreeContents(owner, repo, branch, token string, useBase64 bo
 
 	// 如果树被截断，提供警告
 	if treeResp.Truncated {
-		log.Printf("警告: 仓库树被截断，可能不包含所有文件")
+		log.Print("警告: 仓库树被截断，可能不包含所有文件")
 	}
 
 	// 优先收集文档和重要文件
