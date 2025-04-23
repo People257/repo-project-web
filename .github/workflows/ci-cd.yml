@@ -62,6 +62,8 @@ jobs:
         script: |
           # 创建应用目录（如果不存在）
           mkdir -p /www/wwwroot/repo-prompt-web/app
+          mkdir -p /www/wwwroot/repo-prompt-web/config
+          mkdir -p /www/wwwroot/repo-prompt-web/logs
           
           # 清理之前的构建文件（如果有）
           rm -rf /www/wwwroot/repo-prompt-web/app/build
@@ -75,6 +77,12 @@ jobs:
           git clone https://github.com/${{ github.repository }}.git .
           git checkout ${{ github.sha }}
           
+          # 复制配置文件示例（如果配置文件不存在）
+          if [ ! -f /www/wwwroot/repo-prompt-web/config/config.yml ]; then
+            cp config.yml /www/wwwroot/repo-prompt-web/config/config.yml
+            echo "初始化配置文件"
+          fi
+          
           # 在服务器上构建Docker镜像
           docker build -t repo-prompt-web:latest .
           
@@ -84,13 +92,26 @@ jobs:
           
           # 启动新容器
           docker run -d --name repo-prompt-web \
+            --restart=always \
             -p 8080:8080 \
             -e DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }} \
             -e GITHUB_API_KEY=${{ secrets.GH_API_KEY }} \
             -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
             -e GEMINI_PROXY=${{ secrets.GEMINI_PROXY }} \
             -v /www/wwwroot/repo-prompt-web/config:/app/config \
+            -v /www/wwwroot/repo-prompt-web/logs:/app/logs \
             repo-prompt-web:latest
           
           # 清理临时目录
-          rm -rf $TEMP_DIR 
+          rm -rf $TEMP_DIR
+          
+          # 验证部署是否成功
+          echo "等待服务启动..."
+          sleep 10
+          
+          if curl -s http://localhost:8080/health > /dev/null; then
+            echo "✅ 服务已成功部署并正在运行"
+          else
+            echo "⚠️ 服务可能未正常启动，请检查Docker日志"
+            docker logs repo-prompt-web
+          fi 
