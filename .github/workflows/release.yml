@@ -66,6 +66,7 @@ jobs:
           host: ${{ secrets.PROD_DEPLOY_HOST }}
           username: ${{ secrets.PROD_DEPLOY_USERNAME }}
           key: ${{ secrets.PROD_DEPLOY_KEY }}
+          port: 22
           script: |
             VERSION=${GITHUB_REF#refs/tags/}
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/repo-prompt-web:$VERSION
@@ -77,5 +78,6 @@ jobs:
               -e GITHUB_API_KEY=${{ secrets.GH_API_KEY }} \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
               -e GEMINI_PROXY=${{ secrets.GEMINI_PROXY }} \
-              -v /path/to/config:/app/config \
+              -v /www/wwwroot/repo-prompt-web/config:/app/config \
+              -v /www/wwwroot/repo-prompt-web/logs:/app/logs \
               ${{ secrets.DOCKERHUB_USERNAME }}/repo-prompt-web:$VERSION
