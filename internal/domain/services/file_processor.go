@@ -45,12 +45,12 @@ func (fp *FileProcessor) ProcessZipFile(file io.ReaderAt, size int64, useBase64 
 
 		filePath := zipEntry.Name
 		if fp.config.IsExcluded(filePath, zipEntry.UncompressedSize64) {
-			log.Printf("排除 (规则): %s", filePath)
+			log.Print("排除 (规则): " + filePath)
 			continue
 		}
 
 		if !fp.config.IsLikelyTextFile(filePath) {
-			log.Printf("排除 (非文本扩展名): %s", filePath)
+			log.Print("排除 (非文本扩展名): " + filePath)
 			continue
 		}
 
@@ -69,13 +69,13 @@ func (fp *FileProcessor) ProcessZipFile(file io.ReaderAt, size int64, useBase64 
 		}
 
 		if int64(len(contentBytes)) > fp.config.GetMaxFileSize() {
-			log.Printf("排除 (文件内容超限): %s", filePath)
+			log.Print("排除 (文件内容超限): " + filePath)
 			continue
 		}
 
 		contentType := http.DetectContentType(contentBytes)
 		if !strings.HasPrefix(contentType, "text/") && !fp.config.IsTextContentTypeException(contentType) {
-			log.Printf("排除 (检测到二进制内容 %s): %s", contentType, filePath)
+			log.Print("排除 (检测到二进制内容 " + contentType + "): " + filePath)
 			continue
 		}
 

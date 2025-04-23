@@ -258,12 +258,10 @@ func (pg *PromptGenerator) generateArchitectPrompt(dirStructure string, docs []m
 	log.Printf("准备处理 %d 个文档", len(docs))
 
 	// 限制目录结构大小
-	if len(dirStructure) > 5000 {
-		log.Printf("目录结构过大，进行截断")
-		lines := strings.Split(dirStructure, "\n")
-		if len(lines) > 50 {
-			dirStructure = strings.Join(lines[:50], "\n") + "\n... [目录结构已截断] ...\n"
-		}
+	if len(dirStructure) > 10000 {
+		// 如果目录结构太长，进行截断
+		dirStructure = dirStructure[:10000] + "\n... [目录结构已截断] ..."
+		log.Print("目录结构过大，进行截断")
 	}
 
 	// 构建文档内容
@@ -323,7 +321,7 @@ func (pg *PromptGenerator) generateArchitectPrompt(dirStructure string, docs []m
 
 	// 增加超时时间
 	client := &http.Client{Timeout: 120 * time.Second}
-	log.Printf("发送请求到 DeepSeek API，超时设置: 120秒")
+	log.Print("发送请求到 DeepSeek API，超时设置: 120秒")
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("调用 DeepSeek API 失败: %v", err)
@@ -346,7 +344,7 @@ func (pg *PromptGenerator) generateArchitectPrompt(dirStructure string, docs []m
 	// 解析响应
 	choices, ok := result["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
-		log.Printf("DeepSeek API 响应格式无效")
+		log.Print("DeepSeek API 响应格式无效")
 		return nil, fmt.Errorf("无效的API响应格式")
 	}
 
