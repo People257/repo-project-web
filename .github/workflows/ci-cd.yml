@@ -85,8 +85,48 @@ jobs:
             echo "初始化配置文件"
           fi
           
-          # 在服务器上构建Docker镜像
-          docker build -t repo-prompt-web:latest .
+          # 配置Docker镜像加速器
+          echo "配置Docker镜像加速..."
+          if [ ! -f /etc/docker/daemon.json ]; then
+            mkdir -p /etc/docker
+            echo '{
+              "registry-mirrors": [
+                "https://registry.cn-hangzhou.aliyuncs.com",
+                "https://mirror.ccs.tencentyun.com",
+                "https://hub-mirror.c.163.com"
+              ]
+            }' | sudo tee /etc/docker/daemon.json
+            sudo systemctl daemon-reload
+            sudo systemctl restart docker
+            echo "Docker镜像加速器配置完成"
+          fi
+          
+          # 在服务器上构建Docker镜像，增加重试机制
+          echo "开始构建Docker镜像..."
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+          BUILD_SUCCESS=false
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ] && [ "$BUILD_SUCCESS" != "true" ]; do
+            echo "构建尝试 $ATTEMPT/$MAX_ATTEMPTS"
+            if docker build -t repo-prompt-web:latest .; then
+              BUILD_SUCCESS=true
+              echo "Docker镜像构建成功!"
+            else
+              ATTEMPT=$((ATTEMPT+1))
+              if [ $ATTEMPT -le $MAX_ATTEMPTS ]; then
+                echo "构建失败，30秒后重试..."
+                sleep 30
+              else
+                echo "构建失败，已达到最大重试次数"
+              fi
+            fi
+          done
+          
+          if [ "$BUILD_SUCCESS" != "true" ]; then
+            echo "Docker镜像构建失败，退出部署"
+            exit 1
+          fi
           
           # 停止并删除旧容器（如果存在）
           docker stop repo-prompt-web || true
@@ -107,13 +147,31 @@ jobs:
           # 清理临时目录
           rm -rf $TEMP_DIR
           
-          # 验证部署是否成功
+          # 验证部署是否成功，增加等待时间和重试
           echo "等待服务启动..."
-          sleep 10
+          sleep 30  # 增加等待时间
           
-          if curl -s http://localhost:8080/health > /dev/null; then
-            echo "✅ 服务已成功部署并正在运行"
-          else
+          MAX_CHECKS=5
+          CHECK=1
+          SUCCESS=false
+          
+          while [ $CHECK -le $MAX_CHECKS ] && [ "$SUCCESS" != "true" ]; do
+            echo "健康检查 $CHECK/$MAX_CHECKS"
+            if curl -s http://localhost:8080/health > /dev/null; then
+              SUCCESS=true
+              echo "✅ 服务已成功部署并正在运行"
+            else
+              CHECK=$((CHECK+1))
+              if [ $CHECK -le $MAX_CHECKS ]; then
+                echo "服务未响应，20秒后重试..."
+                sleep 20
+              else
+                echo "健康检查失败，已达到最大重试次数"
+              fi
+            fi
+          done
+          
+          if [ "$SUCCESS" != "true" ]; then
             echo "⚠️ 服务可能未正常启动，请检查Docker日志"
             docker logs repo-prompt-web
           fi 
