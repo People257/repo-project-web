@@ -137,7 +137,7 @@ func (s *AIService) buildInitialPrompt(result *types.ProcessResult, projectAnaly
 			fileContent = fileContent[:5000] + "...(内容已截断)"
 		}
 
-		promptBuilder.AppendLine(fmt.Sprintf("\n### %s", path))
+		promptBuilder.AppendLine("\n### " + path)
 		promptBuilder.AppendLine("```")
 		promptBuilder.AppendLine(fileContent)
 		promptBuilder.AppendLine("```")
@@ -196,7 +196,7 @@ func (s *AIService) AskQuestionAboutCode(result *types.ProcessResult, projectAna
 
 		for i := startIdx; i < len(context.Messages); i++ {
 			msg := context.Messages[i]
-			promptBuilder.AppendLine(fmt.Sprintf("\n%s: %s", msg.Role, msg.Content))
+			promptBuilder.AppendLine("\n" + msg.Role + ": " + msg.Content)
 		}
 
 		prompt = promptBuilder.String()
@@ -282,7 +282,7 @@ func (s *AIService) AskQuestionAboutCodeStream(result *types.ProcessResult, proj
 
 		for i := startIdx; i < len(context.Messages); i++ {
 			msg := context.Messages[i]
-			promptBuilder.AppendLine(fmt.Sprintf("\n%s: %s", msg.Role, msg.Content))
+			promptBuilder.AppendLine("\n" + msg.Role + ": " + msg.Content)
 		}
 
 		prompt = promptBuilder.String()
