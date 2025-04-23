@@ -1,0 +1,17 @@
+linters:
+  disable:
+    - staticcheck # 完全禁用 staticcheck，如果只想禁用特定规则，使用下面的方式
+
+linters-settings:
+  staticcheck:
+    checks:
+      - "-SA1006" # 禁用 printf-style function with dynamic format string 规则
+
+issues:
+  exclude-rules:
+    - linters:
+        - staticcheck
+      text: "SA1006:" # 通过文本匹配排除 SA1006 错误
+
+run:
+  timeout: 5m 
