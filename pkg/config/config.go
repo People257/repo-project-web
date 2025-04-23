@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -124,7 +125,7 @@ func (c *Config) IsExcluded(filePath string, fileSize uint64) bool {
 
 	// 检查目录前缀
 	for _, prefix := range c.ExcludedDirPrefixes {
-		if filepath.HasPrefix(normalizedPath, prefix) {
+		if strings.HasPrefix(normalizedPath, prefix) {
 			return true
 		}
 	}

@@ -57,10 +57,9 @@ func (s *AIService) cleanupExpiredSessions() {
 
 	for range ticker.C {
 		s.mu.Lock()
-		now := time.Now()
 		for id, context := range s.sessionHistory {
 			// 2小时不活跃则清理
-			if now.Sub(context.LastActive) > 2*time.Hour {
+			if time.Since(context.LastActive) > 2*time.Hour {
 				delete(s.sessionHistory, id)
 				logger.Debug("清理过期AI会话上下文", zap.String("session_id", id))
 			}
