@@ -212,7 +212,7 @@ func (s *AIService) AskQuestionAboutCode(result *types.ProcessResult, projectAna
 	// 打印发送给Gemini的内容
 	fmt.Println("\n===== 发送给Gemini的内容开始 =====")
 	fmt.Println(prompt)
-	fmt.Println("===== 发送给Gemini的内容结束 =====\n")
+	fmt.Println("===== 发送给Gemini的内容结束 =====")
 
 	// 调用Gemini API
 	response, err := s.geminiClient.SendPrompt(prompt)
@@ -298,7 +298,7 @@ func (s *AIService) AskQuestionAboutCodeStream(result *types.ProcessResult, proj
 	// 打印发送给Gemini的内容
 	fmt.Println("\n===== 发送给Gemini的内容开始 =====")
 	fmt.Println(prompt)
-	fmt.Println("===== 发送给Gemini的内容结束 =====\n")
+	fmt.Println("===== 发送给Gemini的内容结束 =====")
 
 	// 创建响应通道
 	responseChan := make(chan gemini.StreamChunk, 100)
